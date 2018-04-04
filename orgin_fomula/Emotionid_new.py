@@ -117,18 +117,18 @@ def RNN(X, weights, biases):
     X = tf.reshape(X, [-1, feature_number])
 
     # 3 hidden layer
-    X_hidd1 = tf.nn.sigmoid(
+    X_hidd1 = tf.nn.relu(
         tf.matmul(X, weights['in']) + biases['in'])
-    X_hidd2 = tf.nn.sigmoid(
+    X_hidd2 = tf.nn.tanh(
         tf.matmul(X_hidd1, weights['hidd2']) + biases['hidd2'])
     X_hidd3 = tf.nn.sigmoid(
         tf.matmul(X_hidd2, weights['hidd3']) + biases['hidd3'])
-    X_hidd4 = tf.nn.sigmoid(
+    X_hidd4 = tf.nn.relu(
         tf.matmul(X_hidd3, weights['hidd4']) + biases['hidd4'])
-    X_hidd5 = tf.nn.sigmoid(
+    X_hidd5 = tf.nn.softsign(
         tf.matmul(X_hidd4, weights['hidd5']) + biases['hidd5'])
-    X_hidd6 = tf.nn.sigmoid(
-        tf.matmul(X_hidd5, weights['hidd6']) + biases['hidd6'])
+    # X_hidd6 = tf.nn.softplus(
+    #     tf.matmul(X_hidd5, weights['hidd6']) + biases['hidd6'])
 
     # X_in = tf.reshape(X_hidd1, [-1, n_steps, n_hidden2_units])
     # 注意啦，要把所有的特征放在LSTM啦，并且有可以不知道的分段在里边n_steps
@@ -153,7 +153,7 @@ def RNN(X, weights, biases):
     X_att2 = final_state[0]  # weights
     outputs_att = tf.multiply(outputs[-1], X_att2)
     '''
-    results = tf.nn.softmax(tf.matmul(X_hidd6, weights['out']) + biases['out'])
+    results = tf.nn.softmax(tf.matmul(X_hidd5, weights['out']) + biases['out'])
 
     return results
 
@@ -171,7 +171,7 @@ feature_training, label_training, feature_testing, label_testing = get_train_tes
 n_steps = 1
 
 feature_number = 62
-batch_size = 1000
+batch_size = 20000
 
 # batch split
 n_group = feature_training.shape[0]//batch_size
@@ -179,13 +179,13 @@ n_group = feature_training.shape[0]//batch_size
 # 下面是和模型有关的
 nodes = 8192
 lameda = 0.001
-lr = 0.01
-train_times = 40000
+lr = 0.001
+train_times = 10000
 
 # hyperparameters
 n_inputs = feature_number  # the size of input layer
 n_hidden1_units = 64    # neurons in hidden layer
-n_hidden2_units = 64
+n_hidden2_units = 128
 n_hidden3_units = 128
 n_hidden4_units = 256
 n_hidden5_units = 512
@@ -204,8 +204,8 @@ weights = {
     'hidd5': tf.Variable(tf.random_normal([n_hidden4_units, n_hidden5_units])),
     'hidd6': tf.Variable(tf.random_normal([n_hidden5_units, n_hidden6_units])),
 
-    'out': tf.Variable(tf.random_normal([n_hidden6_units, n_classes]), trainable=True),
-    'att': tf.Variable(tf.random_normal([n_inputs, n_hidden6_units]), trainable=True),
+    'out': tf.Variable(tf.random_normal([n_hidden5_units, n_classes]), trainable=True),
+    'att': tf.Variable(tf.random_normal([n_inputs, n_hidden5_units]), trainable=True),
     'att2': tf.Variable(tf.random_normal([1, batch_size]), trainable=True),
 }
 biases = {
@@ -218,8 +218,8 @@ biases = {
     'hidd6': tf.Variable(tf.constant(0.1, shape=[n_hidden6_units])),
 
     'out': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
-    'att': tf.Variable(tf.constant(0.1, shape=[n_hidden6_units])),
-    'att2': tf.Variable(tf.constant(0.1, shape=[n_hidden6_units])),
+    'att': tf.Variable(tf.constant(0.1, shape=[n_hidden5_units])),
+    'att2': tf.Variable(tf.constant(0.1, shape=[n_hidden5_units])),
 }
 
 
