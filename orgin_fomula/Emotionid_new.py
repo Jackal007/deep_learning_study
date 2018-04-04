@@ -9,7 +9,7 @@ import shutil
 import os
 
 
-def one_hot(y_):
+def one_hot(y_, n_values=3):
     '''
     # this function is used to transfer one column label to one hot label
     # Function to encode output labels from number indexes
@@ -18,7 +18,6 @@ def one_hot(y_):
     '''
     y_ = y_.reshape(len(y_))
     y_ = y_.astype(int) + 1  # 因为onehot不能处理负数，所以把所有的数加上最小的负数的绝对值，即1
-    n_values = np.max(y_) + 1
     return np.eye(n_values)[np.array(y_, dtype=np.int32)]
 
 
@@ -57,7 +56,7 @@ def i_want_to_see(name, content):
     print('#####################################################################################')
 
 
-def get_train_test_datas(dataset_dir='../seed_data/'):
+def get_train_test_datas(batch_size, dataset_dir='../seed_data/'):
     '''
     @param: dataset_dir:the directory store the datas
     @return: train_x,train_y,test_x,test_y
@@ -69,16 +68,17 @@ def get_train_test_datas(dataset_dir='../seed_data/'):
 
     record_list = [task for task in os.listdir(
         dataset_dir) if os.path.isfile(os.path.join(dataset_dir, task))]
-    for record in record_list:
-        data_list = sio.loadmat(dataset_dir+"/"+record)
-        for eeg_num in data_list.keys():
-            if '1' in eeg_num:
-                student_data = data_list[str(int(eeg_num))].transpose(1, 0)
-                for line in student_data:
-                    data = line.tolist()
-                    y = labels[int(eeg_num) - 101]
-                    data.append(y)
-                    datas.append(data)
+    record_name = record_list[np.random.randint(0, len(record_list))]
+
+    record = sio.loadmat(dataset_dir+"/"+record_name)
+    data_keys = [key for key in record.keys() if '1' in key]
+    for eeg_num in data_keys:
+        student_data = record[eeg_num].transpose(1, 0)
+        y = labels[int(eeg_num) - 101]
+        for line in student_data:
+            data = line.tolist()
+            data.append(y)
+            datas.append(data)
 
     # mess up the datas
     datas = np.array(datas).reshape(-1, 63)
@@ -102,9 +102,9 @@ def get_train_test_datas(dataset_dir='../seed_data/'):
     # split x and y
     feature_number = 62
     train_x = train_data[:, :feature_number]
-    train_y = one_hot(train_data[:, feature_number:])
+    train_y = one_hot(train_data[:, feature_number:], n_values=3)
     test_x = test_data[:, :feature_number]
-    test_y = one_hot(test_data[:, feature_number:])
+    test_y = one_hot(test_data[:, feature_number:], n_values=3)
 
     return train_x, train_y, test_x, test_y
 
@@ -118,17 +118,29 @@ def RNN(X, weights, biases):
 
     # 3 hidden layer
     X_hidd1 = tf.nn.relu(
-        tf.matmul(X, weights['in']) + biases['in'])
+        tf.add(
+            tf.matmul(X, weights['in']),
+            biases['in']))
     X_hidd2 = tf.nn.tanh(
-        tf.matmul(X_hidd1, weights['hidd2']) + biases['hidd2'])
+        tf.add(
+            tf.matmul(X_hidd1, weights['hidd2']),
+            biases['hidd2']))
     X_hidd3 = tf.nn.sigmoid(
-        tf.matmul(X_hidd2, weights['hidd3']) + biases['hidd3'])
-    X_hidd4 = tf.nn.relu(
-        tf.matmul(X_hidd3, weights['hidd4']) + biases['hidd4'])
-    X_hidd5 = tf.nn.softsign(
-        tf.matmul(X_hidd4, weights['hidd5']) + biases['hidd5'])
-    # X_hidd6 = tf.nn.softplus(
-    #     tf.matmul(X_hidd5, weights['hidd6']) + biases['hidd6'])
+        tf.add(
+            tf.matmul(X_hidd2, weights['hidd3']),
+            biases['hidd3']))
+    X_hidd4 = tf.nn.softsign(
+        tf.add(
+            tf.matmul(X_hidd3, weights['hidd4']),
+            biases['hidd4']))
+    X_hidd5 = tf.nn.elu(
+        tf.add(
+            tf.matmul(X_hidd4, weights['hidd5']),
+            biases['hidd5']))
+    X_hidd6 = tf.nn.elu(
+        tf.add(
+            tf.matmul(X_hidd5, weights['hidd6']),
+            biases['hidd6']))
 
     # X_in = tf.reshape(X_hidd1, [-1, n_steps, n_hidden2_units])
     # 注意啦，要把所有的特征放在LSTM啦，并且有可以不知道的分段在里边n_steps
@@ -153,7 +165,7 @@ def RNN(X, weights, biases):
     X_att2 = final_state[0]  # weights
     outputs_att = tf.multiply(outputs[-1], X_att2)
     '''
-    results = tf.nn.softmax(tf.matmul(X_hidd5, weights['out']) + biases['out'])
+    results = tf.nn.softmax(tf.matmul(X_hidd6, weights['out']) + biases['out'])
 
     return results
 
@@ -164,32 +176,38 @@ logfile = "log"
 if os.path.exists(logfile):
     shutil.rmtree(logfile)
 
-# 获取数据
-feature_training, label_training, feature_testing, label_testing = get_train_test_datas()
-
 # 定义一些东西
 n_steps = 1
 
 feature_number = 62
-batch_size = 20000
+batch_size = 10000
 
 # batch split
-n_group = feature_training.shape[0]//batch_size
+n_group = 1
 
 # 下面是和模型有关的
 nodes = 8192
 lameda = 0.001
-lr = 0.001
-train_times = 10000
+train_times = 50000
+
+learning_rate = 0.001
+# tf.train.exponential_decay(
+#     learning_rate=0.01,
+#     global_step=train_times,
+#     decay_steps=100,
+#     decay_rate=0.96,
+#     staircase=True,
+#     name=None
+# )
 
 # hyperparameters
 n_inputs = feature_number  # the size of input layer
 n_hidden1_units = 64    # neurons in hidden layer
-n_hidden2_units = 128
+n_hidden2_units = 96
 n_hidden3_units = 128
-n_hidden4_units = 256
-n_hidden5_units = 512
-n_hidden6_units = 1024
+n_hidden4_units = 160
+n_hidden5_units = 198
+n_hidden6_units = 256
 n_classes = 3  # the size of output layer,there are 3 different kind of classes
 
 
@@ -204,8 +222,8 @@ weights = {
     'hidd5': tf.Variable(tf.random_normal([n_hidden4_units, n_hidden5_units])),
     'hidd6': tf.Variable(tf.random_normal([n_hidden5_units, n_hidden6_units])),
 
-    'out': tf.Variable(tf.random_normal([n_hidden5_units, n_classes]), trainable=True),
-    'att': tf.Variable(tf.random_normal([n_inputs, n_hidden5_units]), trainable=True),
+    'out': tf.Variable(tf.random_normal([n_hidden6_units, n_classes]), trainable=True),
+    'att': tf.Variable(tf.random_normal([n_inputs, n_hidden6_units]), trainable=True),
     'att2': tf.Variable(tf.random_normal([1, batch_size]), trainable=True),
 }
 biases = {
@@ -218,8 +236,8 @@ biases = {
     'hidd6': tf.Variable(tf.constant(0.1, shape=[n_hidden6_units])),
 
     'out': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
-    'att': tf.Variable(tf.constant(0.1, shape=[n_hidden5_units])),
-    'att2': tf.Variable(tf.constant(0.1, shape=[n_hidden5_units])),
+    'att': tf.Variable(tf.constant(0.1, shape=[n_hidden6_units])),
+    'att2': tf.Variable(tf.constant(0.1, shape=[n_hidden6_units])),
 }
 
 
@@ -236,7 +254,7 @@ cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
     logits=pred, labels=y))+l2  # Softmax loss
 
 
-train_op = tf.train.AdamOptimizer(lr).minimize(cost)
+train_op = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 pred_result = tf.argmax(pred, 1, name="pred_result")
 label_true = tf.argmax(y, 1)
 correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
@@ -266,9 +284,15 @@ with tf.Session(config=config) as sess:
     train_writer = tf.summary.FileWriter(logfile+"/train", sess.graph)
     test_writer = tf.summary.FileWriter(logfile+"/test", sess.graph)
 
+    feature_training, label_training, feature_testing, label_testing = get_train_test_datas(
+        batch_size)
+
     for step in range(train_times):
 
+        lr = learning_rate  # sess.run(learning_rate)
+
         ################ train #################
+
         batch_start_index = np.random.randint(
             feature_training.shape[0]-batch_size-1)
         batch_x = feature_training[batch_start_index:batch_start_index+batch_size]
@@ -293,15 +317,19 @@ with tf.Session(config=config) as sess:
 
         ############### print something ##################
         if step % 10 == 0:
+
+            feature_training, label_training, feature_testing, label_testing = get_train_test_datas(
+                batch_size)
+
             print("The lamda is :", lameda, ", Learning rate:", lr, ", The step is:", step,
                   ", The test accuracy is:", test_accuracy, ", The train accuracy is:", train_accuracy)
             print("The cost is :", train_cost)
 
         ############### early stopping ##################
-        if test_accuracy > 0.999:
-            print(
-                "The lamda is :", lameda, ", Learning rate:", lr, ", The step is:", step, ", The accuracy is: ", test_accuracy)
-            break
+        # if test_accuracy > 0.9999:
+        #     print(
+        #         "The lamda is :", lameda, ", Learning rate:", lr, ", The step is:", step, ", The accuracy is: ", test_accuracy)
+        #     break
 
     train_writer.close()
     test_writer.close()
