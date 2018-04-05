@@ -7,39 +7,7 @@ from scipy.signal import butter, lfilter
 import xgboost as xgb
 import shutil
 import os
-
-
-def one_hot(y_, n_values=3):
-    '''
-    # this function is used to transfer one column label to one hot label
-    # Function to encode output labels from number indexes
-    # e.g.: [[5], [0], [3]] --> [[0, 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0]]
-    @return: one_hot_code
-    '''
-    y_ = y_.reshape(len(y_))
-    y_ = y_.astype(int) + 1  # 因为onehot不能处理负数，所以把所有的数加上最小的负数的绝对值，即1
-    return np.eye(n_values)[np.array(y_, dtype=np.int32)]
-
-
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    '''
-    extract the delta from the data
-    @return: b,a
-    '''
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = butter(order, [low, high], btype='band')
-    return b, a
-
-
-def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
-    '''
-    @return: y
-    '''
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = lfilter(b, a, data)
-    return y
+from data_getter import get_train_datas, get_test_datas
 
 
 def i_want_to_see(name, content):
@@ -54,59 +22,6 @@ def i_want_to_see(name, content):
     print('-------------------------------------------------------------------------------------')
     print(content)
     print('#####################################################################################')
-
-
-def get_train_test_datas(batch_size, dataset_dir='../seed_data/'):
-    '''
-    @param: dataset_dir:the directory store the datas
-    @return: train_x,train_y,test_x,test_y
-    '''
-    import scipy.io as sio
-
-    labels = [1, 0, - 1, - 1, 0, 1, - 1, 0, 1, 1, 0, - 1, 0, 1, - 1]
-    datas = []
-
-    record_list = [task for task in os.listdir(
-        dataset_dir) if os.path.isfile(os.path.join(dataset_dir, task))]
-    record_name = record_list[np.random.randint(0, len(record_list))]
-
-    record = sio.loadmat(dataset_dir+"/"+record_name)
-    data_keys = [key for key in record.keys() if '1' in key]
-    for eeg_num in data_keys:
-        student_data = record[eeg_num].transpose(1, 0)
-        y = labels[int(eeg_num) - 101]
-        for line in student_data:
-            data = line.tolist()
-            data.append(y)
-            datas.append(data)
-
-    # mess up the datas
-    datas = np.array(datas).reshape(-1, 63)
-    np.random.shuffle(datas)
-
-    # 这里会出错
-    # # filter the wave
-    # temp = np.array([])
-    # for i in range(datas.shape[1]-1):
-    #     np.hstack((temp,
-    #                butter_bandpass_filter(
-    #                    data=datas[:, i], lowcut=12, highcut=30, fs=200, order=3)))
-
-    # 归一化处理
-    datas = preprocessing.scale(datas)
-
-    # split train data and test data
-    train_data = datas[: int(len(datas)*0.8)]
-    test_data = datas[int(len(datas)*0.8):]
-
-    # split x and y
-    feature_number = 62
-    train_x = train_data[:, :feature_number]
-    train_y = one_hot(train_data[:, feature_number:], n_values=3)
-    test_x = test_data[:, :feature_number]
-    test_y = one_hot(test_data[:, feature_number:], n_values=3)
-
-    return train_x, train_y, test_x, test_y
 
 
 def RNN(X, weights, biases):
@@ -179,7 +94,7 @@ if os.path.exists(logfile):
 # 定义一些东西
 n_steps = 1
 
-feature_number = 62
+feature_number = 62*2
 batch_size = 10000
 
 # batch split
@@ -284,8 +199,8 @@ with tf.Session(config=config) as sess:
     train_writer = tf.summary.FileWriter(logfile+"/train", sess.graph)
     test_writer = tf.summary.FileWriter(logfile+"/test", sess.graph)
 
-    feature_training, label_training, feature_testing, label_testing = get_train_test_datas(
-        batch_size)
+    feature_training, label_training = get_train_datas()
+    feature_testing, label_testing = get_test_datas()
 
     for step in range(train_times):
 
@@ -318,8 +233,7 @@ with tf.Session(config=config) as sess:
         ############### print something ##################
         if step % 10 == 0:
 
-            feature_training, label_training, feature_testing, label_testing = get_train_test_datas(
-                batch_size)
+            feature_training, label_training = get_train_test_datas()
 
             print("The lamda is :", lameda, ", Learning rate:", lr, ", The step is:", step,
                   ", The test accuracy is:", test_accuracy, ", The train accuracy is:", train_accuracy)
