@@ -231,9 +231,9 @@ with tf.Session(config=config) as sess:
         test_writer.add_summary(summary, step)
 
         ############### print something ##################
-        if step % 10 == 0:
+        if step % 50 == 0:
 
-            feature_training, label_training = get_train_test_datas()
+            feature_training, label_training = get_train_datas()
 
             print("The lamda is :", lameda, ", Learning rate:", lr, ", The step is:", step,
                   ", The test accuracy is:", test_accuracy, ", The train accuracy is:", train_accuracy)
