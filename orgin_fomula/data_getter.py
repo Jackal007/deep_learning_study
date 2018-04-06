@@ -10,14 +10,18 @@ from sklearn import preprocessing
 from scipy.signal import butter, lfilter
 
 batch_size = 4096
+n_step = 64  # 因为数据等下要交给lstm来处理
 feature_number = 62
 train_dataset_dir = '../seed_data/train/'
 test_dataset_dir = '../seed_data/test/'
 
-train_datas = []
+train_x = []
+train_y = []
 train_datas_len = 0
 train_datas_cursor = 0
-test_datas = []
+
+test_x = []
+test_y = []
 test_datas_len = 0
 test_datas_cursor = 0
 
@@ -33,7 +37,7 @@ def one_hot(y_, values=[]):
     @param values:different values
     @return: one_hot_code
     '''
-    y_ = y_.reshape(len(y_)).astype(int)
+    y_ = np.array(y_).astype(int)
     n_values = len(values)
 
     # 因为onehot不能处理负数，所以把所有的数加上最小的负数的绝对值
@@ -64,49 +68,29 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     return y
 
 
-def data_preprocess(datas):
+def data_preprocess(xs, ys):
     '''
     @return processed data
     '''
-    ######################## incide functions ######################
-    def split_x_and_y(datas):
-        '''
-        @param data:the data you want to split into x and y
-        @return x,y
-        '''
-        # split x and y
-        x = datas[:, :feature_number]
-        y = datas[:, feature_number:]
 
-        try:
-            x = np.array(x)
-            y = np.array(y)
-        except:
-            pass
-
-        return x, y
-    ##############################################################
-
-    # mess up the datas
-    datas = np.array(datas).reshape(-1, feature_number+1)
-    np.random.shuffle(datas)
-
-    # 这里会出错
     # # filter the wave
+    # 这里会出错
     # temp = np.array([])
     # for i in range(datas.shape[1]-1):
     #     np.hstack((temp,
     #                butter_bandpass_filter(
     #                    data=datas[:, i], lowcut=12, highcut=30, fs=200, order=3)))
 
-    # 归一化处理
-    datas = preprocessing.scale(datas)
+    # 归一化,onehot化
+    processed_xs = []
+    for x in xs:
+        x = preprocessing.scale(np.array(x))
+        processed_xs.append(x)
 
-    # split x and y
-    x, y = split_x_and_y(datas)
-    y = one_hot(y, values=[-1, 0, 1])
+    processed_xs = np.array(processed_xs).reshape(-1, n_step, feature_number)
+    processed_ys = one_hot(ys, values=[-1, 0, 1])
 
-    return x, y
+    return processed_xs, processed_ys
 
 
 def get_train_datas():
@@ -114,8 +98,11 @@ def get_train_datas():
     get random datas from train dataset
     @return: train_x,train_y
     '''
-    global train_datas
+    global train_x, train_y
     global train_datas_len
+
+    train_x = []
+    train_y = []
 
     record_list = [task for task in os.listdir(
         train_dataset_dir) if os.path.isfile(os.path.join(train_dataset_dir, task))]
@@ -127,12 +114,19 @@ def get_train_datas():
     for eeg_num in data_keys:
         student_data = record[eeg_num].transpose(1, 0)
         y = labels[int(eeg_num) - 101]
-        for line_num in range(len(student_data)-1):
-            data = student_data[line_num].tolist()
-            data.append(y)
-            train_datas.append(data)
+        cursor = 0
+        while cursor+n_step < len(student_data):
+            cursor += n_step
+            x = student_data[cursor:cursor+n_step].tolist()
 
-    train_datas_len = len(train_datas)
+            if np.array(x).shape[0] != n_step:
+                continue
+
+            train_x.append(x)
+            train_y.append(y)
+
+    train_x, train_y = data_preprocess(train_x, train_y)
+    train_datas_len = len(train_y)
 
 
 def get_test_datas():
@@ -141,7 +135,7 @@ def get_test_datas():
     @return: test_x,test_y
     '''
 
-    global test_datas
+    global test_x, test_y
     global test_datas_len
 
     record_list = [task for task in os.listdir(
@@ -152,29 +146,37 @@ def get_test_datas():
             if '1' in eeg_num:
                 student_data = data_list[str(int(eeg_num))].transpose(1, 0)
                 y = labels[int(eeg_num) - 101]
-                for line_num in range(len(student_data)-1):
-                    data = student_data[line_num].tolist()
-                    data.append(y)
-                    test_datas.append(data)
+                cursor = 0
+                while cursor+n_step < len(student_data):
+                    cursor += n_step
+                    x = student_data[cursor:cursor+n_step].tolist()
 
-    test_datas_len = len(test_datas)
+                    if np.array(x).shape[0] != n_step:
+                        continue
+
+                    test_x.append(x)
+                    test_y.append(y)
+
+    test_x, test_y = data_preprocess(test_x, test_y)
+    test_datas_len = len(test_y)
 
 
 def get_next_train_batch():
     '''
     @return train_x and train_y in batch size
     '''
-
     global train_datas_cursor
 
     if train_datas_cursor+batch_size >= train_datas_len:
-        get_train_datas()
         train_datas_cursor = 0
+        get_train_datas()
 
-    t_datas = train_datas[train_datas_cursor:train_datas_cursor+batch_size]
-    train_x, train_y = data_preprocess(t_datas)
+    x = train_x[train_datas_cursor:train_datas_cursor+batch_size]
+    y = train_y[train_datas_cursor:train_datas_cursor+batch_size]
 
-    return train_x, train_y
+    train_datas_cursor += batch_size
+
+    return x, y
 
 
 def get_next_test_batch():
@@ -190,12 +192,29 @@ def get_next_test_batch():
     if test_datas_cursor+batch_size >= test_datas_len:
         test_datas_cursor = 0
 
-    t_datas = test_datas[test_datas_cursor:test_datas_cursor+batch_size]
-    test_x, test_y = data_preprocess(t_datas)
+    x = test_x[test_datas_cursor:test_datas_cursor+batch_size]
+    y = test_y[test_datas_cursor:test_datas_cursor+batch_size]
 
-    return test_x, test_y
+    test_datas_cursor += batch_size
+
+    return x, y
 
 
 def get_test_datas_len():
 
     return test_datas_len
+
+
+def get_feature_number():
+
+    return feature_number
+
+
+def get_batch_size():
+
+    return batch_size
+
+
+def get_n_step():
+
+    return n_step
