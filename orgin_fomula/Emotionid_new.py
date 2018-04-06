@@ -10,25 +10,23 @@ import os
 from data_getter import get_next_train_batch, get_next_test_batch, get_feature_number, get_batch_size, get_n_step
 
 
-def i_want_to_see(name, content):
+def i_want_to_see(title,content=[]):
     '''
     print what you want to see in a cool way
     @param name:
     @param content:
     '''
 
-    print('#####################################################################################')
-    print(name)
-    print('-------------------------------------------------------------------------------------')
-    print(content)
-    print('#####################################################################################')
+    print('------------------------------',title,'------------------------------')
+    for c in content:
+        print(c)
 
 
 def RNN(X):
 
     # neurons in hidden layer
     input_units = n_inputs
-    fc1_in_size = 64
+    fc1_in_size=128
     fc1_nuits = 64
     fc2_nuits = 64
     fc3_nuits = 64
@@ -38,22 +36,22 @@ def RNN(X):
     # Define weights and biases
     weights = {
         'input': tf.Variable(tf.random_normal([n_inputs, input_units]), trainable=True),
-        'lstm_out': tf.Variable(tf.random_normal([input_units, fc1_in_size]), trainable=True),
-        'fc1': tf.Variable(tf.random_normal([fc1_in_size, fc1_nuits]), trainable=True),
-        'fc2': tf.Variable(tf.random_normal([fc1_nuits, fc2_nuits]), trainable=True),
-        'fc3': tf.Variable(tf.random_normal([fc2_nuits, fc3_nuits]), trainable=True),
-        'fc4': tf.Variable(tf.random_normal([fc3_nuits, fc4_nuits]), trainable=True),
-        'fc5': tf.Variable(tf.random_normal([fc4_nuits, fc5_nuits]), trainable=True),
+        'lstm_out': tf.Variable(tf.random_normal([input_units, n_classes]), trainable=True),
+        'fc1': tf.Variable(tf.random_normal([fc1_in_size, fc1_nuits]),trainable=True),
+        'fc2': tf.Variable(tf.random_normal([fc1_nuits, fc2_nuits]),trainable=True),
+        'fc3': tf.Variable(tf.random_normal([fc2_nuits, fc3_nuits]),trainable=True),
+        'fc4': tf.Variable(tf.random_normal([fc3_nuits, fc4_nuits]),trainable=True),
+        'fc5': tf.Variable(tf.random_normal([fc4_nuits, fc5_nuits]),trainable=True),
         'output': tf.Variable(tf.random_normal([fc1_nuits, n_classes]), trainable=True),
     }
     biases = {
-        'input': tf.Variable(tf.constant(0.1, shape=[input_units]), trainable=True),
-        'lstm_out': tf.Variable(tf.constant(0.1, shape=[fc1_in_size]), trainable=True),
-        'fc1': tf.Variable(tf.constant(0.1, shape=[fc1_nuits]), trainable=True),
-        'fc2': tf.Variable(tf.constant(0.1, shape=[fc2_nuits]), trainable=True),
-        'fc3': tf.Variable(tf.constant(0.1, shape=[fc3_nuits]), trainable=True),
-        'fc4': tf.Variable(tf.constant(0.1, shape=[fc4_nuits]), trainable=True),
-        'fc5': tf.Variable(tf.constant(0.1, shape=[fc5_nuits]), trainable=True),
+        'input': tf.Variable(tf.constant(0.1, shape=[input_units]),trainable=True),
+        'lstm_out': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
+        'fc1': tf.Variable(tf.constant(0.1, shape=[fc1_nuits]),trainable=True),
+        'fc2': tf.Variable(tf.constant(0.1, shape=[fc2_nuits]),trainable=True),
+        'fc3': tf.Variable(tf.constant(0.1, shape=[fc3_nuits]),trainable=True),
+        'fc4': tf.Variable(tf.constant(0.1, shape=[fc4_nuits]),trainable=True),
+        'fc5': tf.Variable(tf.constant(0.1, shape=[fc5_nuits]),trainable=True),
         'output': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
     }
 
@@ -85,18 +83,20 @@ def RNN(X):
     lstm_results = tf.matmul(outputs[-1], weights['lstm_out']) + \
         biases['lstm_out']  # 选取最后一个 output
 
-    # 3------------------- fc -------------------
-    # X (input_units, fc1_in_size)
+    # # 3------------------- fc -------------------
+    # # X (input_units, fc1_in_size)
 
-    fc1_layer = tf.nn.relu(
-        tf.add(
-            tf.matmul(lstm_results, weights['fc1']),
-            biases['fc1']))
+    # fc1_layer = tf.nn.relu(
+    #     tf.add(
+    #         tf.matmul(lstm_results, weights['fc1']),
+    #         biases['fc1']))
 
-    results = tf.matmul(fc1_layer, weights['output']) + \
-        biases['output']
+    # results=tf.matmul(fc1_layer, weights['output']) + \
+    #     biases['output'] 
 
-    return results  # , outputs_att
+    
+
+    return lstm_results  # , outputs_att
 
 
 ##################################################################### 跑模型 ##################################################################
@@ -173,10 +173,9 @@ with tf.Session(config=config) as sess:
     train_writer = tf.summary.FileWriter(logfile+"/train", sess.graph)
     test_writer = tf.summary.FileWriter(logfile+"/test", sess.graph)
 
-    for step in range(train_times):
-        print(1)
+    lr = learning_rate  # sess.run(learning_rate)   
 
-        lr = learning_rate  # sess.run(learning_rate)
+    for step in range(train_times):
 
         ################ train #################
         batch_x, batch_y = get_next_train_batch()
@@ -189,21 +188,24 @@ with tf.Session(config=config) as sess:
         train_writer.add_summary(summary, step)
         sess.run(tf.local_variables_initializer())
 
-        # ############### print something ##################
-        # if step % 10 == 0:
+        ############### print something ##################
+        if step % 10 == 0:
 
-        #     batch_x, batch_y = get_next_test_batch()
+            batch_x, batch_y = get_next_test_batch()
+            
+            test_accuracy, streaming_loss, streaming_accuracy = sess.run([accuracy, streaming_loss_update, streaming_accuracy_update],
+                                                                     feed_dict={x: batch_x,
+                                                                                y: batch_y,
+                                                                                })
+            summary = sess.run(test_merge)
+            test_writer.add_summary(summary, step)
 
-        #     test_accuracy, streaming_loss, streaming_accuracy = sess.run([accuracy, streaming_loss_update, streaming_accuracy_update],
-        #                                                                  feed_dict={x: batch_x,
-        #                                                                             y: batch_y,
-        #                                                                             })
-        #     summary = sess.run(test_merge)
-        #     test_writer.add_summary(summary, step)
-
-        #     # print("The lamda is :", lameda, ", Learning rate:", lr, ", The step is:", step,
-        #     #       ", The test accuracy is:", test_accuracy, ", The train accuracy is:", train_accuracy)
-        #     # print("The cost is :", train_cost)
+            i_want_to_see(title='step'+str(step),
+                content=[
+                    'lamda: '+str(lameda)+'   Learning rate: '+str(lr)+'    cost: '+str(train_cost),
+                    'train accuracy:    '+str(train_accuracy),
+                    'test accuracy :    '+str(test_accuracy),
+                ])
 
         # ############## early stopping ##################
         # if test_accuracy > 0.9999:
