@@ -9,10 +9,20 @@ import numpy as np
 from sklearn import preprocessing
 from scipy.signal import butter, lfilter
 
+batch_size = 4096
+feature_number = 62
 train_dataset_dir = '../seed_data/train/'
 test_dataset_dir = '../seed_data/test/'
+
+train_datas = []
+train_datas_len = 0
+train_datas_cursor = 0
+test_datas = []
+test_datas_len = 0
+test_datas_cursor = 0
+
+
 labels = [1, 0, - 1, - 1, 0, 1, - 1, 0, 1, 1, 0, - 1, 0, 1, - 1]
-feature_number = 62*2
 
 
 def one_hot(y_, values=[]):
@@ -58,6 +68,25 @@ def data_preprocess(datas):
     '''
     @return processed data
     '''
+    ######################## incide functions ######################
+    def split_x_and_y(datas):
+        '''
+        @param data:the data you want to split into x and y
+        @return x,y
+        '''
+        # split x and y
+        x = datas[:, :feature_number]
+        y = datas[:, feature_number:]
+
+        try:
+            x = np.array(x)
+            y = np.array(y)
+        except:
+            pass
+
+        return x, y
+    ##############################################################
+
     # mess up the datas
     datas = np.array(datas).reshape(-1, feature_number+1)
     np.random.shuffle(datas)
@@ -74,8 +103,8 @@ def data_preprocess(datas):
     datas = preprocessing.scale(datas)
 
     # split x and y
-    x = datas[:, :feature_number]
-    y = one_hot(datas[:, feature_number:], values=[-1, 0, 1])
+    x, y = split_x_and_y(datas)
+    y = one_hot(y, values=[-1, 0, 1])
 
     return x, y
 
@@ -85,8 +114,8 @@ def get_train_datas():
     get random datas from train dataset
     @return: train_x,train_y
     '''
-
-    datas = []
+    global train_datas
+    global train_datas_len
 
     record_list = [task for task in os.listdir(
         train_dataset_dir) if os.path.isfile(os.path.join(train_dataset_dir, task))]
@@ -94,17 +123,16 @@ def get_train_datas():
 
     record = sio.loadmat(train_dataset_dir+"/"+record_name)
     data_keys = [key for key in record.keys() if '1' in key]
+
     for eeg_num in data_keys:
         student_data = record[eeg_num].transpose(1, 0)
         y = labels[int(eeg_num) - 101]
         for line_num in range(len(student_data)-1):
             data = student_data[line_num].tolist()
-            data.extend(student_data[line_num+1].tolist())
             data.append(y)
-            datas.append(data)
+            train_datas.append(data)
 
-    train_x, train_y = data_preprocess(datas)
-    return train_x, train_y
+    train_datas_len = len(train_datas)
 
 
 def get_test_datas():
@@ -113,7 +141,8 @@ def get_test_datas():
     @return: test_x,test_y
     '''
 
-    datas = []
+    global test_datas
+    global test_datas_len
 
     record_list = [task for task in os.listdir(
         test_dataset_dir) if os.path.isfile(os.path.join(test_dataset_dir, task))]
@@ -125,10 +154,48 @@ def get_test_datas():
                 y = labels[int(eeg_num) - 101]
                 for line_num in range(len(student_data)-1):
                     data = student_data[line_num].tolist()
-                    data.extend(student_data[line_num+1].tolist())
                     data.append(y)
-                    datas.append(data)
+                    test_datas.append(data)
 
-    test_x, test_y = data_preprocess(datas)
+    test_datas_len = len(test_datas)
+
+
+def get_next_train_batch():
+    '''
+    @return train_x and train_y in batch size
+    '''
+
+    global train_datas_cursor
+
+    if train_datas_cursor+batch_size >= train_datas_len:
+        get_train_datas()
+        train_datas_cursor = 0
+
+    t_datas = train_datas[train_datas_cursor:train_datas_cursor+batch_size]
+    train_x, train_y = data_preprocess(t_datas)
+
+    return train_x, train_y
+
+
+def get_next_test_batch():
+    '''
+    @return test_x and test_y in batch size
+    '''
+
+    global test_datas_cursor
+
+    if test_datas_len <= 0:
+        get_test_datas()
+
+    if test_datas_cursor+batch_size >= test_datas_len:
+        test_datas_cursor = 0
+
+    t_datas = test_datas[test_datas_cursor:test_datas_cursor+batch_size]
+    test_x, test_y = data_preprocess(t_datas)
 
     return test_x, test_y
+
+
+def get_test_datas_len():
+
+    return test_datas_len
