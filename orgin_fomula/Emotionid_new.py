@@ -27,52 +27,53 @@ def i_want_to_see(name, content):
 def RNN(X):
 
     # neurons in hidden layer
-    n_hidden1_units = n_inputs
-    n_hidden2_units = 64
-    n_hidden3_units = 64
-    n_hidden4_units = 64
-    n_hidden5_units = 64
-    n_hidden6_units = 64
+    input_units = n_inputs
+    fc1_in_size = 64
+    fc1_nuits = 64
+    fc2_nuits = 64
+    fc3_nuits = 64
+    fc4_nuits = 64
+    fc5_nuits = 64
 
     # Define weights and biases
     weights = {
-        'in': tf.Variable(tf.random_normal([n_inputs, n_hidden1_units]), trainable=True),
-        'hidd2': tf.Variable(tf.random_normal([n_hidden1_units, n_hidden2_units])),
-        'hidd3': tf.Variable(tf.random_normal([n_hidden2_units, n_hidden3_units])),
-        'hidd4': tf.Variable(tf.random_normal([n_hidden3_units, n_hidden4_units])),
-        'hidd5': tf.Variable(tf.random_normal([n_hidden4_units, n_hidden5_units])),
-        'hidd6': tf.Variable(tf.random_normal([n_hidden5_units, n_hidden6_units])),
-        'out': tf.Variable(tf.random_normal([n_hidden1_units, n_classes]), trainable=True),
+        'input': tf.Variable(tf.random_normal([n_inputs, input_units]), trainable=True),
+        'lstm_out': tf.Variable(tf.random_normal([input_units, fc1_in_size]), trainable=True),
+        'fc1': tf.Variable(tf.random_normal([fc1_in_size, fc1_nuits]), trainable=True),
+        'fc2': tf.Variable(tf.random_normal([fc1_nuits, fc2_nuits]), trainable=True),
+        'fc3': tf.Variable(tf.random_normal([fc2_nuits, fc3_nuits]), trainable=True),
+        'fc4': tf.Variable(tf.random_normal([fc3_nuits, fc4_nuits]), trainable=True),
+        'fc5': tf.Variable(tf.random_normal([fc4_nuits, fc5_nuits]), trainable=True),
+        'output': tf.Variable(tf.random_normal([fc1_nuits, n_classes]), trainable=True),
     }
     biases = {
-        'in': tf.Variable(tf.constant(0.1, shape=[n_hidden1_units])),
-        'hidd2': tf.Variable(tf.constant(0.1, shape=[n_hidden2_units])),
-        'hidd3': tf.Variable(tf.constant(0.1, shape=[n_hidden3_units])),
-        'hidd4': tf.Variable(tf.constant(0.1, shape=[n_hidden4_units])),
-        'hidd5': tf.Variable(tf.constant(0.1, shape=[n_hidden5_units])),
-        'hidd6': tf.Variable(tf.constant(0.1, shape=[n_hidden6_units])),
-        'out': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
+        'input': tf.Variable(tf.constant(0.1, shape=[input_units]), trainable=True),
+        'lstm_out': tf.Variable(tf.constant(0.1, shape=[fc1_in_size]), trainable=True),
+        'fc1': tf.Variable(tf.constant(0.1, shape=[fc1_nuits]), trainable=True),
+        'fc2': tf.Variable(tf.constant(0.1, shape=[fc2_nuits]), trainable=True),
+        'fc3': tf.Variable(tf.constant(0.1, shape=[fc3_nuits]), trainable=True),
+        'fc4': tf.Variable(tf.constant(0.1, shape=[fc4_nuits]), trainable=True),
+        'fc5': tf.Variable(tf.constant(0.1, shape=[fc5_nuits]), trainable=True),
+        'output': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
     }
 
     ###################################### model struct srart ############################################
 
     # 1------------------- fc -------------------
-    # X (batch_size,n_step,n_hidden1_units=n_inputs)===>X (?,n_hidden1_units=n_inputs)
-    X = tf.reshape(X, [-1, n_hidden1_units])
+    # X (batch_size,n_step,input_units=n_inputs)===>X (?,input_units=n_inputs)
+    X = tf.reshape(X, [-1, input_units])
 
     X_hidd1 = tf.nn.relu(
         tf.add(
-            tf.matmul(X, weights['in']),
-            biases['in']))
-
+            tf.matmul(X, weights['input']),
+            biases['input']))
 
     # 2------------------- lstm -------------------
-    # X_hidd1 (?,n_hidden1_units=n_inputs) ====> X_in (batch_size=?,n_step,n_hidden1_units=n_inputs)
-    X_in = tf.reshape(X_hidd1, [-1, n_step, n_hidden1_units])
+    # X_hidd1 (?,input_units=n_inputs) ====> X_in (batch_size=?,n_step,input_units=n_inputs)
+    X_in = tf.reshape(X_hidd1, [-1, n_step, input_units])
 
-    # hidden layer basic LSTM Cell.
     lstm_cell = tf.contrib.rnn.BasicLSTMCell(
-        n_hidden1_units, forget_bias=1, state_is_tuple=True)
+        input_units, forget_bias=1, state_is_tuple=True)
 
     init_state = lstm_cell.zero_state(batch_size, dtype=tf.float32)
 
@@ -81,36 +82,19 @@ def RNN(X):
 
     # outputs , final_states is the last outputs
     outputs = tf.unstack(tf.transpose(outputs, [1, 0, 2]))
-    results = tf.matmul(outputs[-1], weights['out']) + \
-        biases['out']  # 选取最后一个 output
+    lstm_results = tf.matmul(outputs[-1], weights['lstm_out']) + \
+        biases['lstm_out']  # 选取最后一个 output
 
-    # # 3------------------- fc -------------------
-    # # X_hidd1 (?,n_hidden1_units=n_inputs) ====> X_in (batch_size=?,n_step,n_hidden1_units=n_inputs)
+    # 3------------------- fc -------------------
+    # X (input_units, fc1_in_size)
 
-    # X_hidd2 = tf.nn.tanh(
-    #     tf.add(
-    #         tf.matmul(X_hidd1, weights['hidd2']),
-    #         biases['hidd2']))
-    # X_hidd3 = tf.nn.sigmoid(
-    #     tf.add(
-    #         tf.matmul(X_hidd2, weights['hidd3']),
-    #         biases['hidd3']))
-    # X_hidd4 = tf.nn.softsign(
-    #     tf.add(
-    #         tf.matmul(X_hidd3, weights['hidd4']),
-    #         biases['hidd4']))
-    # X_hidd5 = tf.nn.elu(
-    #     tf.add(
-    #         tf.matmul(X_hidd4, weights['hidd5']),
-    #         biases['hidd5']))
-    # X_hidd6 = tf.nn.elu(
-    #     tf.add(
-    #         tf.matmul(X_hidd5, weights['hidd6']),
-    #         biases['hidd6']))
+    fc1_layer = tf.nn.relu(
+        tf.add(
+            tf.matmul(lstm_results, weights['fc1']),
+            biases['fc1']))
 
-    # # attention based model
-    # X_att2 = final_state[0]  # weights
-    # outputs_att = tf.multiply(outputs[-1], X_att2)
+    results = tf.matmul(fc1_layer, weights['output']) + \
+        biases['output']
 
     return results  # , outputs_att
 
@@ -147,7 +131,7 @@ n_classes = 3  # the size of output layer,there are 3 different kind of classes
 
 
 # tf Graph input
-x = tf.placeholder(tf.float32, [None, n_step,feature_number], name="features")
+x = tf.placeholder(tf.float32, [None, n_step, feature_number], name="features")
 y = tf.placeholder(tf.float32, [None, n_classes], name="labels")
 
 pred = RNN(x)
@@ -190,6 +174,7 @@ with tf.Session(config=config) as sess:
     test_writer = tf.summary.FileWriter(logfile+"/test", sess.graph)
 
     for step in range(train_times):
+        print(1)
 
         lr = learning_rate  # sess.run(learning_rate)
 
