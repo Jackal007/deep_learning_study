@@ -27,65 +27,40 @@ def i_want_to_see(title='title', content=[]):
 def RNN(X):
 
     # neurons in hidden layer
-    input_units = n_inputs
-    fc1_in_size = input_units
-    fc1_nuits = input_units
-    fc2_nuits = input_units
+
+    fc1_in_size = 128
+    fc1_nuits = 256
+    fc2_nuits = 512
     fc3_nuits = 256
     fc4_nuits = 256
     fc5_nuits = 256
 
     # Define weights and biases
     weights = {
-        'input': tf.Variable(tf.random_normal([n_inputs, input_units]), trainable=True),
+        'lstm_out': tf.Variable(tf.random_normal([n_inputs, fc1_in_size]), trainable=True),
         'fc1': tf.Variable(tf.random_normal([fc1_in_size, fc1_nuits]), trainable=True),
         'fc2': tf.Variable(tf.random_normal([fc1_nuits, fc2_nuits]), trainable=True),
-        'lstm_out': tf.Variable(tf.random_normal([fc2_nuits, n_classes]), trainable=True),
         # 'fc3': tf.Variable(tf.random_normal([fc2_nuits, fc3_nuits]), trainable=True),
         # 'fc4': tf.Variable(tf.random_normal([fc3_nuits, fc4_nuits]), trainable=True),
-        # 'output': tf.Variable(tf.random_normal([fc1_nuits, n_classes]), trainable=True),
+        'output': tf.Variable(tf.random_normal([fc2_nuits, n_classes]), trainable=True),
     }
     biases = {
-        'input': tf.Variable(tf.constant(0.1, shape=[input_units]), trainable=True),
+        'lstm_out': tf.Variable(tf.constant(0.1, shape=[fc1_in_size]), trainable=True),
         'fc1': tf.Variable(tf.constant(0.1, shape=[fc1_nuits]), trainable=True),
         'fc2': tf.Variable(tf.constant(0.1, shape=[fc2_nuits]), trainable=True),
-        'lstm_out': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
         # 'fc3': tf.Variable(tf.constant(0.1, shape=[fc3_nuits]), trainable=True),
         # 'fc4': tf.Variable(tf.constant(0.1, shape=[fc4_nuits]), trainable=True),
-        # 'output': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
+        'output': tf.Variable(tf.constant(0.1, shape=[n_classes]), trainable=True),
     }
 
     ###################################### model struct srart ############################################
 
-    # 1------------------- fc -------------------
-    # X (batch_size,n_step,input_units=n_inputs)===>X (?,input_units=n_inputs)
-    X = tf.reshape(X, [-1, input_units])
-
-    input_layer = tf.nn.relu(
-        tf.add(
-            tf.matmul(X, weights['input']),
-            biases['input']))
-
-    # 2------------------- fc -------------------
-    # X (input_units, fc1_in_size)
-    fc1_layer = tf.nn.relu(
-        tf.add(
-            tf.matmul(input_layer, weights['fc1']),
-            biases['fc1']))
-
-    # 3------------------- fc -------------------
-    # X (input_units, fc1_in_size)
-    fc2_layer = tf.nn.relu(
-        tf.add(
-            tf.matmul(fc1_layer, weights['fc2']),
-            biases['fc2']))
-
-    # 4------------------- lstm -------------------
-    # X_hidd1 (?,input_units=n_inputs) ====> X_in (batch_size=?,n_step,input_units=n_inputs)
-    X_in = tf.reshape(fc2_layer, [-1, n_step, input_units])
+    # 1------------------- lstm -------------------
+    # X_in (batch_size=?,n_step,n_inputs)
+    X_in = tf.reshape(X, [-1, n_step, n_inputs])
 
     lstm_cell = tf.contrib.rnn.BasicLSTMCell(
-        input_units, forget_bias=1, state_is_tuple=True)
+        n_inputs, forget_bias=1, state_is_tuple=True)
 
     init_state = lstm_cell.zero_state(batch_size, dtype=tf.float32)
 
@@ -96,6 +71,24 @@ def RNN(X):
     lstm_results = tf.matmul(outputs[-1], weights['lstm_out']) + \
         biases['lstm_out']  # 选取最后一个 output
 
+    # 2------------------- fc -------------------
+    # X
+    # X = tf.reshape(lstm_results, [-1, fc1_in_size])
+
+    fc1_layer = tf.nn.relu(
+        tf.add(
+            tf.matmul(lstm_results, weights['fc1']),
+            biases['fc1']))
+
+    # 3------------------- fc -------------------
+    # X
+    fc2_layer = tf.nn.relu(
+        tf.add(
+            tf.matmul(fc1_layer, weights['fc2']),
+            biases['fc2']))
+
+    fc_drop = tf.nn.dropout(fc2_layer, keep_prob)
+
     # fc3_layer = tf.nn.tanh(
     #     tf.add(
     #         tf.matmul(fc2_layer, weights['fc3']),
@@ -105,10 +98,10 @@ def RNN(X):
     #         tf.matmul(fc3_layer, weights['fc4']),
     #         biases['fc4']))
 
-    # results = tf.nn.relu(tf.matmul(fc1_layer, weights['output']) +
-    #                      biases['output'])
+    results = tf.nn.relu(tf.matmul(fc2_layer, weights['output']) +
+                         biases['output'])
 
-    return lstm_results  # results  # , outputs_att
+    return results  # results  # , outputs_att
 
 
 ##################################################################### 跑模型 ##################################################################
@@ -126,18 +119,17 @@ batch_size = get_batch_size()
 
 # 下面是和模型有关的
 lameda = 0.001
-train_times = 50000
+train_times = 200000
+global_step = tf.Variable(0, name="global_step", trainable=False)
 
-learning_rate = 0.0001
-# tf.train.exponential_decay(
-#     learning_rate=0.01,
-#     global_step=train_times,
-#     decay_steps=100,
-#     decay_rate=0.96,
-#     staircase=True,
-#     name=None
-# )
-
+learning_rate = tf.train.exponential_decay(
+    learning_rate=0.1,
+    global_step=global_step,
+    decay_steps=10,
+    decay_rate=0.999,
+    staircase=False,
+    name=None
+)
 
 n_classes = 3  # the size of output layer,there are 3 different kind of classes
 
@@ -145,6 +137,7 @@ n_classes = 3  # the size of output layer,there are 3 different kind of classes
 # tf Graph input
 x = tf.placeholder(tf.float32, [None, n_step, feature_number], name="features")
 y = tf.placeholder(tf.float32, [None, n_classes], name="labels")
+keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 
 pred = RNN(x)
 
@@ -155,7 +148,8 @@ cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
     logits=pred, labels=y))+l2  # Softmax loss
 
 
-train_op = tf.train.AdamOptimizer(learning_rate).minimize(cost)
+train_op = tf.train.AdamOptimizer(
+    learning_rate).minimize(cost, global_step=global_step)
 pred_result = tf.argmax(pred, 1, name="pred_result")
 label_true = tf.argmax(y, 1)
 correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
@@ -187,12 +181,11 @@ with tf.Session(config=config) as sess:
     sess.run(init)
     train_writer = tf.summary.FileWriter(logfile+"/train", sess.graph)
     test_writer = tf.summary.FileWriter(logfile+"/test", sess.graph)
-
-    lr = learning_rate  # sess.run(learning_rate)
     test_x, test_y = get_next_test_batch()
 
     for step in range(train_times):
 
+        lr = sess.run(learning_rate)
         ################ train #################
         batch_x, batch_y = get_next_train_batch()
 
@@ -201,6 +194,7 @@ with tf.Session(config=config) as sess:
         _, train_accuracy, train_cost, summary = sess.run([train_op, accuracy, cost, train_merge], feed_dict={
             x: batch_x,
             y: batch_y,
+            keep_prob: 0.5,
         })
 
         train_writer.add_summary(summary, step)
@@ -213,11 +207,12 @@ with tf.Session(config=config) as sess:
             test_accuracy, streaming_loss, streaming_accuracy = sess.run([accuracy, streaming_loss_update, streaming_accuracy_update],
                                                                          feed_dict={x: test_x,
                                                                                     y: test_y,
+                                                                                    keep_prob: 1.0,
                                                                                     })
             summary = sess.run(test_merge)
             test_writer.add_summary(summary, step)
 
-            i_want_to_see(title='step'+str(step),
+            i_want_to_see(title='step '+str(step),
                           content=[
                 # 'confusion_matrix',
                 # confusion_matrix.eval(),

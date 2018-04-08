@@ -9,8 +9,8 @@ import numpy as np
 from sklearn import preprocessing
 from scipy.signal import butter, lfilter
 
-batch_size = 4096
-n_step = 64  # 因为数据等下要交给lstm来处理
+batch_size = 64
+n_step = 256  # 因为数据等下要交给lstm来处理
 feature_number = 62
 train_dataset_dir = '../seed_data/train/'
 test_dataset_dir = '../seed_data/test/'
@@ -23,7 +23,6 @@ train_datas_cursor = 0
 test_x = []
 test_y = []
 test_datas_len = 0
-test_datas_cursor = 0
 
 
 labels = [1, 0, - 1, - 1, 0, 1, - 1, 0, 1, 1, 0, - 1, 0, 1, - 1]
@@ -81,13 +80,12 @@ def data_preprocess(xs, ys):
     #                butter_bandpass_filter(
     #                    data=datas[:, i], lowcut=12, highcut=30, fs=200, order=3)))
 
-    # 归一化,onehot化
-    processed_xs = []
-    for x in xs:
-        x = preprocessing.scale(np.array(x))
-        processed_xs.append(x)
+    # 归一化
+    processed_xs = np.array(xs).reshape(-1, feature_number)
+    processed_xs = preprocessing.scale(processed_xs)
+    processed_xs = processed_xs.reshape(-1, n_step, feature_number)
 
-    processed_xs = np.array(processed_xs).reshape(-1, n_step, feature_number)
+    # onehot化
     processed_ys = one_hot(ys, values=[-1, 0, 1])
 
     return processed_xs, processed_ys
@@ -116,8 +114,8 @@ def get_train_datas():
         y = labels[int(eeg_num) - 101]
         cursor = 0
         while cursor+n_step < len(student_data):
-            cursor += n_step
             x = student_data[cursor:cursor+n_step].tolist()
+            cursor += n_step
 
             if np.array(x).shape[0] != n_step:
                 continue
@@ -184,25 +182,17 @@ def get_next_test_batch():
     @return test_x and test_y in batch size
     '''
 
-    global test_datas_cursor
-
     if test_datas_len <= 0:
         get_test_datas()
 
-    if test_datas_cursor+batch_size >= test_datas_len:
-        test_datas_cursor = 0
-
-    x = test_x[test_datas_cursor:test_datas_cursor+batch_size]
-    y = test_y[test_datas_cursor:test_datas_cursor+batch_size]
-
-    test_datas_cursor += batch_size
+    x = []
+    y = []
+    while len(x) < batch_size:
+        random_index = np.random.randint(0, test_datas_len-1)
+        x.append(test_x[random_index])
+        y.append(test_y[random_index])
 
     return x, y
-
-
-def get_test_datas_len():
-
-    return test_datas_len
 
 
 def get_feature_number():
