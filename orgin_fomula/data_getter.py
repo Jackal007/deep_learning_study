@@ -9,7 +9,7 @@ import numpy as np
 from sklearn import preprocessing
 from scipy.signal import butter, lfilter
 
-batch_size = 64
+batch_size = 128
 n_step = 256  # 因为数据等下要交给lstm来处理
 feature_number = 62
 train_dataset_dir = '../seed_data/train/'
