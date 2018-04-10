@@ -12,7 +12,7 @@ from data_getter import get_next_train_batch, get_next_test_batch, get_feature_n
 
 
 # tensorboard things
-logfile = "log"
+logfile = "log2"
 if os.path.exists(logfile):
     shutil.rmtree(logfile)
 
@@ -61,23 +61,38 @@ def my_model(X):
     '''
 
     # neurons in hidden layer
-    input_layer_units = 64
-    # fc1_layer_nuits = 128
-    # fc2_layer_nuits = 128
-    # fc3_layer_nuits = 256
-    # fc4_layer_nuits = 256
-    # fc5_layer_nuits = 256
+    input_layer_units = 128
+    fc1_layer_nuits = 64
+    fc2_layer_nuits = 64
+    fc3_layer_nuits = 64
+    fc4_layer_nuits = 64
+    fc5_layer_nuits = 128
 
     X = tf.reshape(X, [-1, n_inputs])
+
     input_layer = tf.nn.relu(apply_fully_connect(
         x=X, x_size=n_inputs, fc_size=input_layer_units))
 
+    fc1_layer = tf.nn.relu(apply_fully_connect(
+        x=input_layer, x_size=input_layer_units, fc_size=fc1_layer_nuits))
+
+    fc2_layer = tf.nn.relu(apply_fully_connect(
+        x=fc1_layer, x_size=fc1_layer_nuits, fc_size=fc2_layer_nuits))
+
+    fc3_layer = tf.nn.relu(apply_fully_connect(
+        x=fc2_layer, x_size=fc2_layer_nuits, fc_size=fc3_layer_nuits))
+
+    fc4_layer = tf.nn.relu(apply_fully_connect(
+        x=fc3_layer, x_size=fc3_layer_nuits, fc_size=fc4_layer_nuits))
+
+    fc5_layer = tf.nn.relu(apply_fully_connect(
+        x=fc4_layer, x_size=fc4_layer_nuits, fc_size=fc5_layer_nuits))
+
     # -------------------------------- lstm --------------------------------
-    X_in = tf.reshape(input_layer, [-1, n_step, input_layer_units])
+    X_in = tf.reshape(fc5_layer, [-1, n_step, input_layer_units])
 
     lstm_cell = tf.contrib.rnn.BasicLSTMCell(
         input_layer_units, forget_bias=1, state_is_tuple=True)
-
     init_state = lstm_cell.zero_state(batch_size, dtype=tf.float32)
     outputs, final_state = tf.nn.dynamic_rnn(
         lstm_cell, X_in, initial_state=init_state, time_major=False)
@@ -85,8 +100,8 @@ def my_model(X):
     lstm_output = outputs[-1]
     # -------------------------------- lstm --------------------------------
 
-    output_layer = tf.nn.softmax(apply_fully_connect(
-        x=lstm_output, x_size=input_layer_units, fc_size=n_classes))
+    output_layer = apply_fully_connect(
+        x=lstm_output, x_size=input_layer_units, fc_size=n_classes)
 
     return output_layer
 
@@ -103,14 +118,15 @@ n_classes = 3  # there are 3 different kind of classes
 lameda = 0.001
 train_times = 200000
 global_step = tf.Variable(0, name="global_step", trainable=False)
-learning_rate = tf.train.exponential_decay(
-    learning_rate=0.01,
-    global_step=global_step,
-    decay_steps=10,
-    decay_rate=0.999,
-    staircase=False,
-    name=None
-)
+learning_rate = 0.001
+# tf.train.exponential_decay(
+#     learning_rate=0.01,
+#     global_step=global_step,
+#     decay_steps=10,
+#     decay_rate=0.999,
+#     staircase=False,
+#     name=None
+# )
 
 # tf Graph input
 x = tf.placeholder(tf.float32, [None, n_step, feature_number], name="features")
@@ -161,7 +177,7 @@ with tf.Session(config=config) as sess:
             y: batch_y,
             # keep_prob: 0.5,
         })
-
+        print(step)
         ############### print something ##################
         if step % 10 == 0:
             # record train things

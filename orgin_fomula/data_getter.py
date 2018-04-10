@@ -9,7 +9,7 @@ import numpy as np
 from sklearn import preprocessing
 from scipy.signal import butter, lfilter
 
-batch_size = 1024
+batch_size = 4096
 n_step = 1  # 因为数据等下要交给lstm来处理
 overlap = 2
 feature_number = 62*overlap
@@ -72,18 +72,18 @@ def data_preprocess(xs, ys):
     '''
     @return processed data
     '''
+    processed_xs = np.array(xs).reshape(-1,  feature_number)
 
     # # filter the wave
-    # 这里会出错
-    # temp = np.array([])
-    # for i in range(datas.shape[1]-1):
-    #     np.hstack((temp,
-    #                butter_bandpass_filter(
-    #                    data=datas[:, i], lowcut=12, highcut=30, fs=200, order=3)))
+    temp = np.array(butter_bandpass_filter(
+        data=processed_xs[:, 0], lowcut=12, highcut=30, fs=200, order=3)).reshape(-1, 1)
+    for i in range(1, processed_xs.shape[1]):
+        filtered_wave = np.array(butter_bandpass_filter(
+            data=processed_xs[:, i], lowcut=12, highcut=30, fs=200, order=3)).reshape(-1, 1)
+        temp = np.hstack((temp, filtered_wave))
 
     # 归一化
-    processed_xs = np.array(xs).reshape(-1, feature_number)
-    processed_xs = preprocessing.scale(processed_xs)
+    processed_xs = preprocessing.scale(temp)
     processed_xs = processed_xs.reshape(-1, n_step, feature_number)
 
     # onehot化
@@ -115,14 +115,14 @@ def get_train_datas():
         student_data_len = len(student_data)
         y = labels[int(eeg_num) - 101]
         cursor = 0
-        while cursor+n_step < student_data_len:
-            x = student_data[cursor:cursor+n_step*overlap].tolist()
+        while cursor+n_step*overlap < student_data_len:
+            x = student_data[cursor:cursor+n_step*overlap]
             cursor += n_step
 
             if np.array(x).shape[0] != n_step*overlap:
                 continue
 
-            train_x.append(x)
+            train_x.append(x.reshape(feature_number))
             train_y.append(y)
 
     train_x, train_y = data_preprocess(train_x, train_y)
@@ -140,21 +140,22 @@ def get_test_datas():
 
     record_list = [task for task in os.listdir(
         test_dataset_dir) if os.path.isfile(os.path.join(test_dataset_dir, task))]
-    for record in record_list:
-        data_list = sio.loadmat(test_dataset_dir+"/"+record)
-        for eeg_num in data_list.keys():
+    for record_name in record_list:
+        record = sio.loadmat(test_dataset_dir+"/"+record_name)
+        for eeg_num in record.keys():
             if '1' in eeg_num:
-                student_data = data_list[str(int(eeg_num))].transpose(1, 0)
+                student_data = record[eeg_num].transpose(1, 0)
+                student_data_len = len(student_data)
                 y = labels[int(eeg_num) - 101]
                 cursor = 0
-                while cursor+n_step < len(student_data):
+                while cursor+n_step*overlap < student_data_len:
+                    x = student_data[cursor:cursor+n_step*overlap]
                     cursor += n_step
-                    x = student_data[cursor:cursor+n_step].tolist()
 
-                    if np.array(x).shape[0] != n_step:
+                    if np.array(x).shape[0] != n_step*overlap:
                         continue
 
-                    test_x.append(x)
+                    test_x.append(x.reshape(feature_number))
                     test_y.append(y)
 
     test_x, test_y = data_preprocess(test_x, test_y)
