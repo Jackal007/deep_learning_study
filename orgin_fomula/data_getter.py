@@ -9,9 +9,10 @@ import numpy as np
 from sklearn import preprocessing
 from scipy.signal import butter, lfilter
 
-batch_size = 128
-n_step = 256  # 因为数据等下要交给lstm来处理
-feature_number = 62
+batch_size = 1024
+n_step = 1  # 因为数据等下要交给lstm来处理
+overlap = 2
+feature_number = 62*overlap
 train_dataset_dir = '../seed_data/train/'
 test_dataset_dir = '../seed_data/test/'
 
@@ -111,13 +112,14 @@ def get_train_datas():
 
     for eeg_num in data_keys:
         student_data = record[eeg_num].transpose(1, 0)
+        student_data_len = len(student_data)
         y = labels[int(eeg_num) - 101]
         cursor = 0
-        while cursor+n_step < len(student_data):
-            x = student_data[cursor:cursor+n_step].tolist()
+        while cursor+n_step < student_data_len:
+            x = student_data[cursor:cursor+n_step*overlap].tolist()
             cursor += n_step
 
-            if np.array(x).shape[0] != n_step:
+            if np.array(x).shape[0] != n_step*overlap:
                 continue
 
             train_x.append(x)
@@ -185,12 +187,15 @@ def get_next_test_batch():
     if test_datas_len <= 0:
         get_test_datas()
 
-    x = []
-    y = []
-    while len(x) < batch_size:
-        random_index = np.random.randint(0, test_datas_len-1)
-        x.append(test_x[random_index])
-        y.append(test_y[random_index])
+    x = test_x[0:batch_size]
+    y = test_y[0:batch_size]
+
+    # x = []
+    # y = []
+    # while len(x) < batch_size:
+    #     random_index = np.random.randint(0, test_datas_len-1)
+    #     x.append(test_x[random_index])
+    #     y.append(test_y[random_index])
 
     return x, y
 
